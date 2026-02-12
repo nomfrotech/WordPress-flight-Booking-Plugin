@@ -1,0 +1,9 @@
+<?xml version="1.0"?>
+<ruleset name="WFBP">
+  <description>WFBP coding standards.</description>
+  <file>src</file>
+  <file>wordpress-flight-booking-plugin.php</file>
+  <rule ref="WordPress-Core"/>
+  <rule ref="WordPress-Extra"/>
+  <rule ref="WordPress-Docs"/>
+</ruleset>
