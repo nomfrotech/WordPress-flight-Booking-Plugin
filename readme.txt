@@ -19,7 +19,7 @@ WordPress Flight Booking Plugin delivers a modular booking platform designed for
 * Payment provider handoff: PayPal, Paystack, Stripe, Flutterwave, and bank transfer.
 * REST API endpoints for offers, orders, webhooks, and admin passthrough operations.
 * Secure webhook signature verification.
-* Frontend shortcode-based booking interface with vanilla JavaScript.
+* Modern frontend booking interface with airport autocomplete, offer cards, traveler/account stage, and checkout handoff.
 * Elementor “Flight Search” widget.
 * Feature flags for roundtrip, multi-city, ancillaries, and traveler profiles.
 * Custom database schema for offers, orders, and transactions.
@@ -42,6 +42,9 @@ Yes. Enable and configure any supported provider in plugin settings.
 Yes. Display and checkout currency can be configured independently.
 
 == Changelog ==
+= 1.0.1 =
+* Improved airport autocomplete reliability with Duffel + fallback lookup service and upgraded booking templates/UX.
+
 = 1.0.0 =
 * Initial release with Duffel integration, payments, REST API, shortcode UI, Elementor widget, and developer tooling.
 

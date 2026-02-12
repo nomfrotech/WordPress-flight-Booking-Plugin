@@ -73,6 +73,29 @@ final class DuffelClient
         return $this->request('POST', '/air/offer_requests', $payload);
     }
 
+
+    public function searchAirports(string $query): array|WP_Error
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return ['data' => []];
+        }
+
+        // Duffel API airport search can vary by account/version filtering semantics,
+        // so we attempt the common query variants before returning an error.
+        foreach ([
+            '/air/airports?name=' . rawurlencode($query) . '&limit=8',
+            '/air/airports?query=' . rawurlencode($query) . '&limit=8',
+            '/air/airports?iata_code=' . rawurlencode(strtoupper($query)) . '&limit=8',
+        ] as $endpoint) {
+            $response = $this->request('GET', $endpoint);
+            if (! is_wp_error($response)) {
+                return $response;
+            }
+        }
+
+        return new WP_Error('wfbp_airport_lookup_failed', __('Unable to fetch airports from Duffel.', 'wfbp'));
+    }
     public function getOffers(string $offerRequestId): array|WP_Error
     {
         return $this->request('GET', '/air/offers?offer_request_id=' . rawurlencode($offerRequestId));

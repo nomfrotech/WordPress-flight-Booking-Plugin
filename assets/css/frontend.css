@@ -1,18 +1,29 @@
-.wfbp-booking{max-width:1080px;margin:0 auto;background:#fff;border-radius:18px;box-shadow:0 20px 60px rgba(11,31,53,.08);padding:28px}
-.wfbp-booking__head h2{margin:0 0 6px;color:#081c33;font-size:30px}
-.wfbp-booking__head p{margin:0 0 22px;color:#5b6776}
-.wfbp-search-card,.wfbp-traveler-card{background:linear-gradient(180deg,#f8fbff 0%,#fff 100%);border:1px solid #dce6f5;border-radius:14px;padding:18px}
+.wfbp-booking{max-width:1120px;margin:24px auto;padding:28px;background:#fff;border:1px solid #dbe6f4;border-radius:20px;box-shadow:0 22px 58px rgba(3,31,76,.08)}
+.wfbp-booking__head h2{margin:0;color:#0a2240;font-size:32px;line-height:1.1}
+.wfbp-booking__head p{margin:10px 0 22px;color:#55657b}
+.wfbp-search-card,.wfbp-traveler-card{padding:20px;border:1px solid #d8e3f2;border-radius:14px;background:linear-gradient(180deg,#f7fbff,#fff)}
 .wfbp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px}
-.wfbp-field{display:flex;flex-direction:column;gap:6px;font-size:13px;color:#25364a;position:relative}
-.wfbp-field input,.wfbp-field select{border:1px solid #c9d7ea;border-radius:10px;padding:12px 13px;font-size:14px;background:#fff}
-.wfbp-btn-primary,.wfbp-btn-secondary{border:0;border-radius:10px;padding:12px 16px;font-weight:600;cursor:pointer}
-.wfbp-btn-primary{background:#0064ff;color:#fff;margin-top:16px}
-.wfbp-btn-secondary{background:#eef4ff;color:#0c2f66}
-.wfbp-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-top:18px}
-.wfbp-offer-card{padding:14px;border:1px solid #d9e3f2;background:#fff;border-radius:12px}
-.wfbp-offer-card h3{margin:0 0 8px;font-size:16px}
-.wfbp-traveler{margin-top:18px}
-.wfbp-suggest{position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid #d3dded;border-radius:10px;overflow:hidden}
-.wfbp-suggest__item{display:block;width:100%;text-align:left;padding:10px;border:0;background:#fff;cursor:pointer}
+.wfbp-field{display:flex;flex-direction:column;font-size:13px;font-weight:600;color:#23384f;gap:6px;position:relative}
+.wfbp-field input,.wfbp-field select{height:46px;border:1px solid #bfcee4;border-radius:10px;padding:0 12px;background:#fff;font-size:14px;color:#14283f}
+.wfbp-btn-primary,.wfbp-btn-secondary{border:0;border-radius:10px;padding:12px 16px;font-weight:700;cursor:pointer;transition:.2s transform,.2s opacity}
+.wfbp-btn-primary{margin-top:16px;background:#0057ff;color:#fff}
+.wfbp-btn-secondary{background:#edf3ff;color:#0e3068}
+.wfbp-btn-primary:hover,.wfbp-btn-secondary:hover{transform:translateY(-1px);opacity:.95}
+.wfbp-results{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin-top:20px}
+.wfbp-offer-card{border:1px solid #d8e1f0;border-radius:12px;padding:14px;background:#fff}
+.wfbp-offer-card__header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:10px}
+.wfbp-offer-card__header h3{margin:0;font-size:16px;color:#102844}
+.wfbp-offer-card__header span{font-size:12px;color:#5a6b82}
+.wfbp-price{font-size:24px;color:#0c2f66;font-weight:800;margin:8px 0 2px}
+.wfbp-reference{margin:0 0 12px;color:#6a7a8e;font-size:12px}
+.wfbp-traveler{margin-top:20px}
+.wfbp-note{margin:0 0 14px;color:#57677f}
+.wfbp-bank-box{margin-top:14px;padding:14px;border:1px dashed #b7c8e4;border-radius:10px;background:#f5f9ff}
+.wfbp-suggest{position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #ced9ea;border-radius:10px;margin-top:4px;z-index:30;max-height:260px;overflow:auto;box-shadow:0 12px 28px rgba(12,33,59,.08)}
+.wfbp-suggest__item{width:100%;display:flex;justify-content:space-between;align-items:center;gap:8px;padding:10px 12px;background:#fff;border:0;border-bottom:1px solid #eef3fa;text-align:left;cursor:pointer}
+.wfbp-suggest__item:last-child{border-bottom:0}
+.wfbp-suggest__item strong{display:inline-block;min-width:44px;color:#0d346f}
+.wfbp-suggest__item small{color:#6c7f95}
 .wfbp-suggest__item:hover{background:#f4f8ff}
-.wfbp-currency-switcher{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-radius:999px;border:1px solid #dae3ee}
+.wfbp-suggest__hint{padding:10px 12px;font-size:12px;color:#627691}
+.wfbp-currency-switcher{display:inline-flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid #d7e2f2;border-radius:999px;background:#fff}

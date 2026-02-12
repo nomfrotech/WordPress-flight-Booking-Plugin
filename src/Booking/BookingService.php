@@ -18,6 +18,7 @@ final class BookingService
     private Settings $settings;
     private OfferRequestRepository $offers;
     private OrderRepository $orders;
+    private AirportService $airports;
 
     public function __construct(DuffelClient $duffel, CurrencyService $currency, Settings $settings)
     {
@@ -26,6 +27,7 @@ final class BookingService
         $this->settings = $settings;
         $this->offers = new OfferRequestRepository();
         $this->orders = new OrderRepository();
+        $this->airports = new AirportService($duffel);
     }
 
     public function searchOffers(array $payload): array|WP_Error
@@ -43,17 +45,7 @@ final class BookingService
 
     public function searchAirports(string $keyword): array|WP_Error
     {
-        $keyword = sanitize_text_field($keyword);
-        if (strlen($keyword) < 2) {
-            return ['data' => []];
-        }
-
-        $response = $this->duffel->passthrough('/air/airports?limit=8&name=' . rawurlencode($keyword));
-        if (is_wp_error($response)) {
-            return $response;
-        }
-
-        return $response;
+        return $this->airports->search($keyword);
     }
 
     public function createOrder(array $payload): array|WP_Error

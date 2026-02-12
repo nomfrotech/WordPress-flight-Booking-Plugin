@@ -1,19 +1,21 @@
 (() => {
+  if (typeof wfbpConfig === 'undefined') return;
+
   const app = document.querySelector('[data-wfbp-app]');
   const globalCurrencySelect = document.querySelector('[data-wfbp-global-currency]');
   const currencyStoreKey = 'wfbp_selected_currency';
 
-  if (typeof wfbpConfig === 'undefined') return;
-
   const currencies = Object.keys(wfbpConfig.currency.rates || {});
-  const selectedCurrency = localStorage.getItem(currencyStoreKey) || wfbpConfig.currency.display;
+  const currentCurrency = () => localStorage.getItem(currencyStoreKey) || wfbpConfig.currency.display;
 
-  if (globalCurrencySelect) {
+  function initCurrencySwitcher() {
+    if (!globalCurrencySelect) return;
+
     currencies.forEach((currency) => {
       const option = document.createElement('option');
       option.value = currency;
       option.textContent = currency;
-      option.selected = currency === selectedCurrency;
+      option.selected = currency === currentCurrency();
       globalCurrencySelect.appendChild(option);
     });
 
@@ -23,15 +25,7 @@
     });
   }
 
-  if (!app) return;
-
-  const form = app.querySelector('[data-wfbp-form]');
-  const results = app.querySelector('[data-wfbp-results]');
-  const traveler = app.querySelector('[data-wfbp-traveler]');
-
-  const activeCurrency = () => localStorage.getItem(currencyStoreKey) || wfbpConfig.currency.display;
-
-  async function api(path, method = 'GET', body = null) {
+  async function request(path, method = 'GET', body) {
     const response = await fetch(`${wfbpConfig.restBase}${path}`, {
       method,
       headers: {
@@ -40,165 +34,216 @@
       },
       body: body ? JSON.stringify(body) : undefined,
     });
+
     return response.json();
   }
 
-  async function fetchAirports(keyword) {
-    const response = await fetch(`${wfbpConfig.restBase}/airports?q=${encodeURIComponent(keyword)}`, {
-      method: 'GET',
-      headers: { 'X-WP-Nonce': wfbpConfig.nonce },
+  function renderTemplate(id, values) {
+    const el = document.querySelector(id);
+    if (!el) return '';
+    let html = el.innerHTML;
+    Object.entries(values).forEach(([key, value]) => {
+      html = html.replaceAll(`{{${key}}}`, String(value));
     });
-    return response.json();
+    return html;
   }
 
-  function mountAirportAutocomplete(input) {
-    const key = input.getAttribute('data-airport-input');
-    const list = app.querySelector(`[data-airport-list="${key}"]`);
+  function formatConverted(eur, currency) {
+    const rate = wfbpConfig.currency.rates[currency] || 1;
+    return (eur * rate).toFixed(2);
+  }
+
+  function mountAutocomplete(input, list) {
     let timer;
+
+    input.addEventListener('focus', () => {
+      if (!input.value) {
+        list.innerHTML = `<div class="wfbp-suggest__hint">${wfbpConfig.i18n.airportHint}</div>`;
+      }
+    });
 
     input.addEventListener('input', () => {
       clearTimeout(timer);
-      const value = input.value.trim();
-      if (value.length < 2) {
+      const keyword = input.value.trim();
+      if (keyword.length < 2) {
         list.innerHTML = '';
         return;
       }
 
       timer = setTimeout(async () => {
-        const data = await fetchAirports(value);
-        const items = Array.isArray(data.data) ? data.data : [];
-        list.innerHTML = items.map((airport) => {
-          const code = airport.iata_code || airport.id || '';
-          const label = `${airport.city_name || ''} - ${airport.name || ''} (${code})`;
-          return `<button type="button" class="wfbp-suggest__item" data-value="${code}">${label}</button>`;
-        }).join('');
-      }, 250);
+        const json = await request(`/airports?q=${encodeURIComponent(keyword)}`);
+        const items = Array.isArray(json.data) ? json.data : [];
+
+        if (!items.length) {
+          list.innerHTML = '<div class="wfbp-suggest__hint">No airports found.</div>';
+          return;
+        }
+
+        list.innerHTML = items
+          .map((airport) => {
+            const code = airport.iata_code || airport.id || '';
+            const city = airport.city_name || '';
+            const name = airport.name || '';
+            const country = airport.country_name || '';
+            return `<button type="button" class="wfbp-suggest__item" data-iata="${code}"><strong>${code}</strong> ${city} - ${name}<small>${country}</small></button>`;
+          })
+          .join('');
+      }, 200);
     });
 
     list.addEventListener('click', (event) => {
-      const target = event.target.closest('[data-value]');
+      const target = event.target.closest('[data-iata]');
       if (!target) return;
-      input.value = target.getAttribute('data-value');
+      input.value = target.getAttribute('data-iata');
       list.innerHTML = '';
+    });
+
+    document.addEventListener('click', (event) => {
+      if (!event.target.closest('.wfbp-field')) {
+        list.innerHTML = '';
+      }
     });
   }
 
-  app.querySelectorAll('[data-airport-input]').forEach((input) => mountAirportAutocomplete(input));
+  function mountSearchFlow() {
+    if (!app) return;
 
-  form.addEventListener('submit', async (event) => {
-    event.preventDefault();
+    const form = app.querySelector('[data-wfbp-form]');
+    const results = app.querySelector('[data-wfbp-results]');
+    const travelerBox = app.querySelector('[data-wfbp-traveler]');
 
-    const data = Object.fromEntries(new FormData(form).entries());
-    const passengers = parseInt(data.passengers, 10) || 1;
+    app.querySelectorAll('[data-airport-input]').forEach((input) => {
+      const key = input.getAttribute('data-airport-input');
+      const list = app.querySelector(`[data-airport-list="${key}"]`);
+      if (list) mountAutocomplete(input, list);
+    });
 
-    const payload = {
-      data: {
-        slices: [{ origin: data.origin, destination: data.destination, departure_date: data.departure_date }],
-        passengers: Array.from({ length: passengers }, () => ({ type: 'adult' })),
-        cabin_class: data.cabin_class,
-      }
-    };
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
 
-    results.innerHTML = `<p>${wfbpConfig.i18n.loading}</p>`;
-    traveler.hidden = true;
+      const values = Object.fromEntries(new FormData(form).entries());
+      const passengersCount = parseInt(values.passengers, 10) || 1;
 
-    const json = await api('/offers', 'POST', payload);
-    const offers = (json.data && json.data.offers) ? json.data.offers : [];
-
-    if (!offers.length) {
-      results.innerHTML = `<p>${wfbpConfig.i18n.noOffers}</p>`;
-      return;
-    }
-
-    const currency = activeCurrency();
-    const rate = wfbpConfig.currency.rates[currency] || 1;
-
-    results.innerHTML = offers.slice(0, 6).map((offer) => {
-      const eur = parseFloat(offer.total_amount || '0');
-      const converted = (eur * rate).toFixed(2);
-      const owner = offer.owner?.name || 'Airline';
-      return `
-        <article class="wfbp-offer-card">
-          <h3>${owner}</h3>
-          <p><strong>${currency} ${converted}</strong></p>
-          <p>Reference: EUR ${eur.toFixed(2)}</p>
-          <button type="button" class="wfbp-btn-secondary" data-select-offer="${offer.id}" data-total-eur="${eur}">${wfbpConfig.i18n.selectFlight}</button>
-        </article>
-      `;
-    }).join('');
-  });
-
-  results.addEventListener('click', (event) => {
-    const btn = event.target.closest('[data-select-offer]');
-    if (!btn) return;
-
-    const offerId = btn.getAttribute('data-select-offer');
-    const totalEur = parseFloat(btn.getAttribute('data-total-eur') || '0');
-    const providers = Object.entries(wfbpConfig.providers).filter(([, config]) => config.enabled);
-
-    traveler.hidden = false;
-    traveler.innerHTML = `
-      <form class="wfbp-traveler-card" data-wfbp-checkout>
-        <h3>Traveler Information</h3>
-        <div class="wfbp-grid">
-          <label class="wfbp-field">First Name<input name="first_name" required></label>
-          <label class="wfbp-field">Last Name<input name="last_name" required></label>
-          <label class="wfbp-field">Email<input type="email" name="email" required></label>
-          <label class="wfbp-field">Password<input type="password" name="password" required></label>
-        </div>
-        <label class="wfbp-field">Payment Provider
-          <select name="provider" required>
-            ${providers.map(([provider]) => `<option value="${provider}">${provider.replace('_', ' ').toUpperCase()}</option>`).join('')}
-          </select>
-        </label>
-        <button type="submit" class="wfbp-btn-primary">${wfbpConfig.i18n.checkout}</button>
-      </form>
-    `;
-
-    const checkoutForm = traveler.querySelector('[data-wfbp-checkout]');
-    checkoutForm.addEventListener('submit', async (submitEvent) => {
-      submitEvent.preventDefault();
-      const formData = Object.fromEntries(new FormData(checkoutForm).entries());
-
-      const orderPayload = {
-        order: {
-          type: 'instant',
-          selected_offers: [offerId],
-          passengers: [{
-            type: 'adult',
-            family_name: formData.last_name,
-            given_name: formData.first_name,
-            email: formData.email,
+      const offerRequestPayload = {
+        data: {
+          slices: [{
+            origin: values.origin,
+            destination: values.destination,
+            departure_date: values.departure_date,
           }],
+          passengers: Array.from({ length: passengersCount }, () => ({ type: 'adult' })),
+          cabin_class: values.cabin_class,
         },
       };
 
-      const orderResponse = await api('/orders', 'POST', orderPayload);
-      if (!orderResponse.order) {
-        alert(orderResponse.error || 'Could not create order');
+      results.innerHTML = `<p>${wfbpConfig.i18n.loading}</p>`;
+      travelerBox.hidden = true;
+      travelerBox.innerHTML = '';
+
+      const response = await request('/offers', 'POST', offerRequestPayload);
+      const offers = Array.isArray(response?.data?.offers) ? response.data.offers : [];
+
+      if (!offers.length) {
+        results.innerHTML = `<p>${wfbpConfig.i18n.noOffers}</p>`;
         return;
       }
 
-      const localOrderId = orderResponse.order.meta?.local_order_id || 0;
-      const checkoutResponse = await api('/checkout', 'POST', {
-        local_order_id: localOrderId,
-        total_eur: totalEur,
-        provider: formData.provider,
-        currency: activeCurrency(),
-      });
+      const currency = currentCurrency();
+      results.innerHTML = offers.slice(0, 8).map((offer) => {
+        const eur = parseFloat(offer.total_amount || '0');
+        const airline = offer?.owner?.name || 'Airline';
 
-      if (checkoutResponse.error) {
-        alert(checkoutResponse.error);
-        return;
-      }
-
-      const checkout = checkoutResponse.checkout;
-      if (checkout.provider === 'bank_transfer') {
-        alert(`Bank transfer instructions: ${checkout.instructions}\nReference: ${checkout.reference}`);
-        return;
-      }
-
-      window.location.href = checkout.checkout_url;
+        return renderTemplate('#wfbp-offer-card-template', {
+          airline,
+          trip: `${values.origin} → ${values.destination}`,
+          currency,
+          converted: formatConverted(eur, currency),
+          eur: eur.toFixed(2),
+          offer_id: offer.id,
+          total_eur: eur.toFixed(2),
+        });
+      }).join('');
     });
-  });
+
+    results.addEventListener('click', (event) => {
+      const trigger = event.target.closest('[data-select-offer]');
+      if (!trigger) return;
+
+      const offerId = trigger.getAttribute('data-select-offer');
+      const totalEur = parseFloat(trigger.getAttribute('data-total-eur') || '0');
+      const providersHtml = Object.entries(wfbpConfig.providers)
+        .filter(([, cfg]) => cfg.enabled)
+        .map(([provider]) => `<option value="${provider}">${provider.replace('_', ' ').toUpperCase()}</option>`)
+        .join('');
+
+      travelerBox.hidden = false;
+      travelerBox.innerHTML = renderTemplate('#wfbp-traveler-template', { providers: providersHtml });
+
+      const checkoutForm = travelerBox.querySelector('[data-wfbp-checkout]');
+      checkoutForm.addEventListener('submit', async (submitEvent) => {
+        submitEvent.preventDefault();
+        const traveler = Object.fromEntries(new FormData(checkoutForm).entries());
+
+        if (traveler.password !== traveler.password_confirm) {
+          alert(wfbpConfig.i18n.passwordMismatch);
+          return;
+        }
+
+        const customerResponse = await request('/customers', 'POST', {
+          first_name: traveler.first_name,
+          last_name: traveler.last_name,
+          email: traveler.email,
+          password: traveler.password,
+        });
+
+        if (customerResponse.error) {
+          alert(customerResponse.error);
+          return;
+        }
+
+        const orderResponse = await request('/orders', 'POST', {
+          order: {
+            type: 'instant',
+            selected_offers: [offerId],
+            passengers: [{
+              type: 'adult',
+              family_name: traveler.last_name,
+              given_name: traveler.first_name,
+              email: traveler.email,
+              phone_number: traveler.phone,
+            }],
+          },
+        });
+
+        if (!orderResponse.order) {
+          alert(orderResponse.error || 'Order could not be created.');
+          return;
+        }
+
+        const localOrderId = orderResponse.order.meta?.local_order_id || 0;
+        const checkoutResponse = await request('/checkout', 'POST', {
+          local_order_id: localOrderId,
+          total_eur: totalEur,
+          provider: traveler.provider,
+          currency: currentCurrency(),
+        });
+
+        if (checkoutResponse.error) {
+          alert(checkoutResponse.error);
+          return;
+        }
+
+        const checkout = checkoutResponse.checkout;
+        if (checkout.provider === 'bank_transfer') {
+          travelerBox.insertAdjacentHTML('beforeend', `<div class="wfbp-bank-box"><h4>Bank Transfer Instructions</h4><p>${checkout.instructions}</p><p><strong>Reference:</strong> ${checkout.reference}</p></div>`);
+          return;
+        }
+
+        window.location.href = checkout.checkout_url;
+      }, { once: true });
+    });
+  }
+
+  initCurrencySwitcher();
+  mountSearchFlow();
 })();

@@ -37,25 +37,31 @@ final class Routes
         register_rest_route('wfbp/v1', '/offers', [
             'methods' => 'POST',
             'callback' => [$this, 'offers'],
-            'permission_callback' => [$this, 'verifyFrontendNonce'],
-        ]);
-
-        register_rest_route('wfbp/v1', '/orders', [
-            'methods' => 'POST',
-            'callback' => [$this, 'orders'],
-            'permission_callback' => [$this, 'verifyFrontendNonce'],
-        ]);
-
-        register_rest_route('wfbp/v1', '/checkout', [
-            'methods' => 'POST',
-            'callback' => [$this, 'checkout'],
-            'permission_callback' => [$this, 'verifyFrontendNonce'],
+            'permission_callback' => '__return_true',
         ]);
 
         register_rest_route('wfbp/v1', '/airports', [
             'methods' => 'GET',
             'callback' => [$this, 'airports'],
-            'permission_callback' => [$this, 'verifyFrontendNonce'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/customers', [
+            'methods' => 'POST',
+            'callback' => [$this, 'customers'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/orders', [
+            'methods' => 'POST',
+            'callback' => [$this, 'orders'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/checkout', [
+            'methods' => 'POST',
+            'callback' => [$this, 'checkout'],
+            'permission_callback' => '__return_true',
         ]);
 
         register_rest_route('wfbp/v1', '/payments/webhook', [
@@ -69,11 +75,6 @@ final class Routes
             'callback' => [$this, 'passthrough'],
             'permission_callback' => static fn (): bool => current_user_can('manage_options'),
         ]);
-    }
-
-    public function verifyFrontendNonce(WP_REST_Request $request): bool
-    {
-        return wp_verify_nonce((string) $request->get_header('x-wp-nonce'), 'wp_rest');
     }
 
     public function offers(WP_REST_Request $request): WP_REST_Response
@@ -97,6 +98,41 @@ final class Routes
         }
 
         return new WP_REST_Response($response, 200);
+    }
+
+    public function customers(WP_REST_Request $request): WP_REST_Response
+    {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : [];
+
+        $email = sanitize_email((string) ($data['email'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+        $first = sanitize_text_field((string) ($data['first_name'] ?? ''));
+        $last = sanitize_text_field((string) ($data['last_name'] ?? ''));
+
+        if (! is_email($email) || strlen($password) < 8) {
+            return new WP_REST_Response(['error' => __('Valid email and a password with 8+ characters are required.', 'wfbp')], 400);
+        }
+
+        $existing = get_user_by('email', $email);
+        if ($existing instanceof \WP_User) {
+            return new WP_REST_Response(['customer_id' => (int) $existing->ID, 'status' => 'existing'], 200);
+        }
+
+        $userId = wp_insert_user([
+            'user_login' => $email,
+            'user_email' => $email,
+            'user_pass' => $password,
+            'first_name' => $first,
+            'last_name' => $last,
+            'role' => 'subscriber',
+        ]);
+
+        if (is_wp_error($userId)) {
+            return new WP_REST_Response(['error' => $userId->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response(['customer_id' => (int) $userId, 'status' => 'created'], 201);
     }
 
     public function orders(WP_REST_Request $request): WP_REST_Response

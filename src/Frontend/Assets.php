@@ -39,6 +39,8 @@ final class Assets
                 'noOffers' => __('No offers found for this route.', 'wfbp'),
                 'selectFlight' => __('Select this flight', 'wfbp'),
                 'checkout' => __('Checkout', 'wfbp'),
+                'airportHint' => __('Type city, country, or airport code', 'wfbp'),
+                'passwordMismatch' => __('Password confirmation does not match.', 'wfbp'),
             ],
         ]);
     }
