@@ -1,0 +1,209 @@
+<?php
+
+declare(strict_types=1);
+
+namespace WFBP\REST;
+
+use WP_Error;
+use WP_REST_Request;
+use WP_REST_Response;
+use WFBP\API\DuffelClient;
+use WFBP\Booking\BookingService;
+use WFBP\Core\Settings;
+use WFBP\Payments\PaymentService;
+
+final class Routes
+{
+    private BookingService $booking;
+    private PaymentService $payments;
+    private DuffelClient $duffel;
+    private Settings $settings;
+
+    public function __construct(BookingService $booking, PaymentService $payments, DuffelClient $duffel, Settings $settings)
+    {
+        $this->booking = $booking;
+        $this->payments = $payments;
+        $this->duffel = $duffel;
+        $this->settings = $settings;
+    }
+
+    public function register(): void
+    {
+        add_action('rest_api_init', [$this, 'registerRoutes']);
+    }
+
+    public function registerRoutes(): void
+    {
+        register_rest_route('wfbp/v1', '/offers', [
+            'methods' => 'POST',
+            'callback' => [$this, 'offers'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/airports', [
+            'methods' => 'GET',
+            'callback' => [$this, 'airports'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/customers', [
+            'methods' => 'POST',
+            'callback' => [$this, 'customers'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/orders', [
+            'methods' => 'POST',
+            'callback' => [$this, 'orders'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/checkout', [
+            'methods' => 'POST',
+            'callback' => [$this, 'checkout'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/payments/webhook', [
+            'methods' => 'POST',
+            'callback' => [$this, 'webhook'],
+            'permission_callback' => '__return_true',
+        ]);
+
+        register_rest_route('wfbp/v1', '/admin/passthrough', [
+            'methods' => ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
+            'callback' => [$this, 'passthrough'],
+            'permission_callback' => static fn (): bool => current_user_can('manage_options'),
+        ]);
+    }
+
+    public function offers(WP_REST_Request $request): WP_REST_Response
+    {
+        $payload = $request->get_json_params();
+        $response = $this->booking->searchOffers(is_array($payload) ? $payload : []);
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['error' => $response->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response([
+            'offers' => $response['offers'] ?? [],
+            'offer_request' => $response['offer_request'] ?? [],
+            'meta' => $response['meta'] ?? [],
+        ], 200);
+    }
+
+    public function airports(WP_REST_Request $request): WP_REST_Response
+    {
+        $keyword = sanitize_text_field((string) $request->get_param('q'));
+        $response = $this->booking->searchAirports($keyword);
+
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['error' => $response->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response($response, 200);
+    }
+
+    public function customers(WP_REST_Request $request): WP_REST_Response
+    {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : [];
+
+        $email = sanitize_email((string) ($data['email'] ?? ''));
+        $password = (string) ($data['password'] ?? '');
+        $first = sanitize_text_field((string) ($data['first_name'] ?? ''));
+        $last = sanitize_text_field((string) ($data['last_name'] ?? ''));
+
+        if (! is_email($email) || strlen($password) < 8) {
+            return new WP_REST_Response(['error' => __('Valid email and a password with 8+ characters are required.', 'wfbp')], 400);
+        }
+
+        $existing = get_user_by('email', $email);
+        if ($existing instanceof \WP_User) {
+            return new WP_REST_Response(['customer_id' => (int) $existing->ID, 'status' => 'existing'], 200);
+        }
+
+        $userId = wp_insert_user([
+            'user_login' => $email,
+            'user_email' => $email,
+            'user_pass' => $password,
+            'first_name' => $first,
+            'last_name' => $last,
+            'role' => 'subscriber',
+        ]);
+
+        if (is_wp_error($userId)) {
+            return new WP_REST_Response(['error' => $userId->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response(['customer_id' => (int) $userId, 'status' => 'created'], 201);
+    }
+
+    public function orders(WP_REST_Request $request): WP_REST_Response
+    {
+        $payload = $request->get_json_params();
+        $data = is_array($payload) ? $payload : [];
+        $response = $this->booking->createOrder((array) ($data['order'] ?? []));
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['error' => $response->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response(['order' => $response], 201);
+    }
+
+    public function checkout(WP_REST_Request $request): WP_REST_Response
+    {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : [];
+
+        $checkout = $this->payments->createCheckout(
+            (int) ($data['local_order_id'] ?? 0),
+            (float) ($data['total_eur'] ?? 0),
+            sanitize_key((string) ($data['provider'] ?? 'paypal')),
+            sanitize_key((string) ($data['currency'] ?? 'EUR'))
+        );
+
+        if ($checkout instanceof WP_Error) {
+            return new WP_REST_Response(['error' => $checkout->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response(['checkout' => $checkout], 201);
+    }
+
+    public function webhook(WP_REST_Request $request): WP_REST_Response
+    {
+        $signature = (string) $request->get_header('x-wfbp-signature');
+        $raw = $request->get_body();
+
+        if (! $this->payments->verifyWebhookSignature($raw, $signature)) {
+            return new WP_REST_Response(['error' => __('Invalid signature.', 'wfbp')], 403);
+        }
+
+        $payload = $request->get_json_params();
+        $processed = $this->payments->processWebhook(is_array($payload) ? $payload : []);
+
+        return new WP_REST_Response(['processed' => $processed], $processed ? 200 : 400);
+    }
+
+    public function passthrough(WP_REST_Request $request): WP_REST_Response
+    {
+        if (! wp_verify_nonce((string) $request->get_header('x-wp-nonce'), 'wp_rest')) {
+            return new WP_REST_Response(['error' => __('Invalid nonce.', 'wfbp')], 403);
+        }
+
+        $endpoint = sanitize_text_field((string) $request->get_param('endpoint'));
+        $method = sanitize_text_field((string) $request->get_method());
+        $payload = $request->get_json_params();
+
+        if ($endpoint === '') {
+            return new WP_REST_Response(['error' => __('Endpoint is required.', 'wfbp')], 400);
+        }
+
+        $response = $this->duffel->passthrough($endpoint, $method, is_array($payload) ? $payload : []);
+        if ($response instanceof WP_Error) {
+            return new WP_REST_Response(['error' => $response->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response($response, 200);
+    }
+}
