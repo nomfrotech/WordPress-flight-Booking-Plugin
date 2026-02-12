@@ -14,7 +14,7 @@ Commercial-grade flight booking engine integrating Duffel API with multi-currenc
 WordPress Flight Booking Plugin delivers a modular booking platform designed for production-grade flight search and order processing.
 
 = Key Features =
-* Duffel API integration for offer requests and order creation.
+* Duffel API integration with real-time offer request + offer polling and order creation.
 * Multi-currency display and checkout conversion from EUR base settlement.
 * Payment provider handoff: PayPal, Paystack, Stripe, Flutterwave, and bank transfer.
 * REST API endpoints for offers, orders, webhooks, and admin passthrough operations.
@@ -33,7 +33,7 @@ WordPress Flight Booking Plugin delivers a modular booking platform designed for
 
 == Frequently Asked Questions ==
 = Is Duffel token required? =
-Yes, flight search and order creation need an API token.
+Yes. Live airport search and flight offers are pulled from Duffel in real time, so a valid API token is required.
 
 = Does this support multiple payment gateways? =
 Yes. Enable and configure any supported provider in plugin settings.

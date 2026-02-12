@@ -85,7 +85,11 @@ final class Routes
             return new WP_REST_Response(['error' => $response->get_error_message()], 400);
         }
 
-        return new WP_REST_Response($response, 200);
+        return new WP_REST_Response([
+            'offers' => $response['offers'] ?? [],
+            'offer_request' => $response['offer_request'] ?? [],
+            'meta' => $response['meta'] ?? [],
+        ], 200);
     }
 
     public function airports(WP_REST_Request $request): WP_REST_Response

@@ -141,7 +141,7 @@
       travelerBox.innerHTML = '';
 
       const response = await request('/offers', 'POST', offerRequestPayload);
-      const offers = Array.isArray(response?.data?.offers) ? response.data.offers : [];
+      const offers = Array.isArray(response?.offers) ? response.offers : [];
 
       if (!offers.length) {
         results.innerHTML = `<p>${wfbpConfig.i18n.noOffers}</p>`;
