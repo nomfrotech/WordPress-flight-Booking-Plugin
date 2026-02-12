@@ -41,6 +41,21 @@ final class BookingService
         return $response;
     }
 
+    public function searchAirports(string $keyword): array|WP_Error
+    {
+        $keyword = sanitize_text_field($keyword);
+        if (strlen($keyword) < 2) {
+            return ['data' => []];
+        }
+
+        $response = $this->duffel->passthrough('/air/airports?limit=8&name=' . rawurlencode($keyword));
+        if (is_wp_error($response)) {
+            return $response;
+        }
+
+        return $response;
+    }
+
     public function createOrder(array $payload): array|WP_Error
     {
         $response = $this->duffel->createOrder($payload);
@@ -50,8 +65,9 @@ final class BookingService
 
         $duffelId = (string) ($response['data']['id'] ?? '');
         $totalEur = (float) ($response['data']['total_amount'] ?? 0);
-        $this->orders->insert($duffelId, 'created', 'pending', $totalEur);
+        $localOrderId = $this->orders->insert($duffelId, 'created', 'pending', $totalEur);
 
+        $response['meta']['local_order_id'] = $localOrderId;
         return $response;
     }
 

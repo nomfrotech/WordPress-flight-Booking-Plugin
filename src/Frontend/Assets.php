@@ -34,6 +34,12 @@ final class Assets
             'currency' => $this->currency->frontendMeta(),
             'features' => $this->settings->get('feature_flags', []),
             'providers' => $this->settings->get('payment_providers', []),
+            'i18n' => [
+                'loading' => __('Searching flights...', 'wfbp'),
+                'noOffers' => __('No offers found for this route.', 'wfbp'),
+                'selectFlight' => __('Select this flight', 'wfbp'),
+                'checkout' => __('Checkout', 'wfbp'),
+            ],
         ]);
     }
 }

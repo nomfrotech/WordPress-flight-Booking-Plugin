@@ -22,10 +22,10 @@ final class Settings
             'checkout_currency' => 'EUR',
             'manual_rates_json' => '{"USD":1.08,"NGN":1780,"KES":158,"EUR":1,"GBP":0.86,"GHS":17,"XOF":655,"RWF":1425,"ZAR":20.4,"CAD":1.47,"JPY":162}',
             'payment_providers' => [
-                'paypal' => ['enabled' => 1, 'checkout_url' => ''],
-                'paystack' => ['enabled' => 0, 'checkout_url' => ''],
-                'stripe' => ['enabled' => 0, 'checkout_url' => ''],
-                'flutterwave' => ['enabled' => 0, 'checkout_url' => ''],
+                'paypal' => ['enabled' => 1, 'client_id' => '', 'client_secret' => '', 'checkout_url' => 'https://www.paypal.com/checkoutnow'],
+                'paystack' => ['enabled' => 0, 'public_key' => '', 'secret_key' => '', 'checkout_url' => 'https://checkout.paystack.com'],
+                'stripe' => ['enabled' => 0, 'publishable_key' => '', 'secret_key' => '', 'checkout_url' => 'https://checkout.stripe.com'],
+                'flutterwave' => ['enabled' => 0, 'public_key' => '', 'secret_key' => '', 'checkout_url' => 'https://checkout.flutterwave.com/v3/hosted/pay'],
                 'bank_transfer' => ['enabled' => 0, 'instructions' => ''],
             ],
             'feature_flags' => [

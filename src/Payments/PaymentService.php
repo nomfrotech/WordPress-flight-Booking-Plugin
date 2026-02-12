@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace WFBP\Payments;
 
+use WP_Error;
 use WFBP\Core\Settings;
 use WFBP\Currency\CurrencyService;
 use WFBP\Repository\OrderRepository;
@@ -24,10 +25,19 @@ final class PaymentService
         $this->orders = new OrderRepository();
     }
 
-    public function createCheckout(int $orderId, float $totalEur, string $provider, string $currency): array
+    public function createCheckout(int $orderId, float $totalEur, string $provider, string $currency): array|WP_Error
     {
         $providers = (array) $this->settings->get('payment_providers', []);
-        $providerConfig = $providers[$provider] ?? [];
+        $providerConfig = (array) ($providers[$provider] ?? []);
+
+        if (empty($providerConfig) || empty($providerConfig['enabled'])) {
+            return new WP_Error('wfbp_provider_disabled', __('Selected payment provider is unavailable.', 'wfbp'));
+        }
+
+        if (! $this->hasRequiredCredentials($provider, $providerConfig)) {
+            return new WP_Error('wfbp_provider_credentials_missing', __('Payment provider API credentials are missing.', 'wfbp'));
+        }
+
         $converted = $this->currency->convertFromEur($totalEur, $currency);
         $reference = wp_generate_uuid4();
 
@@ -48,6 +58,7 @@ final class PaymentService
                 'ref' => rawurlencode($reference),
                 'amount' => $converted,
                 'currency' => strtoupper($currency),
+                'order_id' => $orderId,
             ],
             (string) ($providerConfig['checkout_url'] ?? '')
         );
@@ -87,5 +98,24 @@ final class PaymentService
         $orderUpdated = $this->orders->updatePaymentStatusByDuffelId($duffelOrderId, $status === 'paid' ? 'paid' : 'failed');
 
         return $transactionUpdated && $orderUpdated;
+    }
+
+    private function hasRequiredCredentials(string $provider, array $config): bool
+    {
+        $required = [
+            'paypal' => ['client_id', 'client_secret'],
+            'paystack' => ['public_key', 'secret_key'],
+            'stripe' => ['publishable_key', 'secret_key'],
+            'flutterwave' => ['public_key', 'secret_key'],
+            'bank_transfer' => ['instructions'],
+        ];
+
+        foreach ($required[$provider] ?? [] as $key) {
+            if (empty($config[$key])) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

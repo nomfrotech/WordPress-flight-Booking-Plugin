@@ -37,13 +37,25 @@ final class Routes
         register_rest_route('wfbp/v1', '/offers', [
             'methods' => 'POST',
             'callback' => [$this, 'offers'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => [$this, 'verifyFrontendNonce'],
         ]);
 
         register_rest_route('wfbp/v1', '/orders', [
             'methods' => 'POST',
             'callback' => [$this, 'orders'],
-            'permission_callback' => '__return_true',
+            'permission_callback' => [$this, 'verifyFrontendNonce'],
+        ]);
+
+        register_rest_route('wfbp/v1', '/checkout', [
+            'methods' => 'POST',
+            'callback' => [$this, 'checkout'],
+            'permission_callback' => [$this, 'verifyFrontendNonce'],
+        ]);
+
+        register_rest_route('wfbp/v1', '/airports', [
+            'methods' => 'GET',
+            'callback' => [$this, 'airports'],
+            'permission_callback' => [$this, 'verifyFrontendNonce'],
         ]);
 
         register_rest_route('wfbp/v1', '/payments/webhook', [
@@ -59,6 +71,11 @@ final class Routes
         ]);
     }
 
+    public function verifyFrontendNonce(WP_REST_Request $request): bool
+    {
+        return wp_verify_nonce((string) $request->get_header('x-wp-nonce'), 'wp_rest');
+    }
+
     public function offers(WP_REST_Request $request): WP_REST_Response
     {
         $payload = $request->get_json_params();
@@ -70,14 +87,34 @@ final class Routes
         return new WP_REST_Response($response, 200);
     }
 
+    public function airports(WP_REST_Request $request): WP_REST_Response
+    {
+        $keyword = sanitize_text_field((string) $request->get_param('q'));
+        $response = $this->booking->searchAirports($keyword);
+
+        if (is_wp_error($response)) {
+            return new WP_REST_Response(['error' => $response->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response($response, 200);
+    }
+
     public function orders(WP_REST_Request $request): WP_REST_Response
     {
         $payload = $request->get_json_params();
         $data = is_array($payload) ? $payload : [];
-        $response = $this->booking->createOrder($data['order'] ?? []);
+        $response = $this->booking->createOrder((array) ($data['order'] ?? []));
         if (is_wp_error($response)) {
             return new WP_REST_Response(['error' => $response->get_error_message()], 400);
         }
+
+        return new WP_REST_Response(['order' => $response], 201);
+    }
+
+    public function checkout(WP_REST_Request $request): WP_REST_Response
+    {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : [];
 
         $checkout = $this->payments->createCheckout(
             (int) ($data['local_order_id'] ?? 0),
@@ -86,7 +123,11 @@ final class Routes
             sanitize_key((string) ($data['currency'] ?? 'EUR'))
         );
 
-        return new WP_REST_Response(['order' => $response, 'checkout' => $checkout], 201);
+        if ($checkout instanceof WP_Error) {
+            return new WP_REST_Response(['error' => $checkout->get_error_message()], 400);
+        }
+
+        return new WP_REST_Response(['checkout' => $checkout], 201);
     }
 
     public function webhook(WP_REST_Request $request): WP_REST_Response

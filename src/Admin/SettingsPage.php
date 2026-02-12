@@ -42,10 +42,10 @@ final class SettingsPage
 
         add_settings_section('wfbp_duffel', __('Duffel Configuration', 'wfbp'), '__return_empty_string', 'wfbp-settings');
         add_settings_section('wfbp_currency', __('Currency Configuration', 'wfbp'), '__return_empty_string', 'wfbp-settings');
-        add_settings_section('wfbp_payments', __('Payment Providers', 'wfbp'), '__return_empty_string', 'wfbp-settings');
+        add_settings_section('wfbp_payments', __('Payment Providers & API Keys', 'wfbp'), '__return_empty_string', 'wfbp-settings');
         add_settings_section('wfbp_features', __('Feature Flags', 'wfbp'), '__return_empty_string', 'wfbp-settings');
 
-        $fields = [
+        foreach ([
             'duffel_api_token' => __('API Token', 'wfbp'),
             'duffel_environment' => __('Environment', 'wfbp'),
             'default_cabin_class' => __('Default Cabin Class', 'wfbp'),
@@ -54,13 +54,11 @@ final class SettingsPage
             'display_currency' => __('Display Currency', 'wfbp'),
             'checkout_currency' => __('Checkout Currency', 'wfbp'),
             'manual_rates_json' => __('Manual Rates JSON', 'wfbp'),
-        ];
-
-        foreach ($fields as $key => $label) {
-            add_settings_field($key, $label, [$this, 'renderField'], 'wfbp-settings', $key === 'display_currency' || $key === 'checkout_currency' || $key === 'manual_rates_json' ? 'wfbp_currency' : 'wfbp_duffel', ['key' => $key]);
+        ] as $key => $label) {
+            add_settings_field($key, $label, [$this, 'renderField'], 'wfbp-settings', in_array($key, ['display_currency', 'checkout_currency', 'manual_rates_json'], true) ? 'wfbp_currency' : 'wfbp_duffel', ['key' => $key]);
         }
 
-        add_settings_field('payment_providers', __('Providers', 'wfbp'), [$this, 'renderPayments'], 'wfbp-settings', 'wfbp_payments');
+        add_settings_field('payment_providers', __('Provider Credentials', 'wfbp'), [$this, 'renderPayments'], 'wfbp-settings', 'wfbp_payments');
         add_settings_field('feature_flags', __('Flags', 'wfbp'), [$this, 'renderFeatures'], 'wfbp-settings', 'wfbp_features');
     }
 
@@ -73,26 +71,33 @@ final class SettingsPage
         $current = $this->settings->all();
         $allowedCurrencies = ['USD','NGN','KES','EUR','GBP','GHS','XOF','RWF','ZAR','CAD','JPY'];
 
-        $current['duffel_api_token'] = sanitize_text_field($input['duffel_api_token'] ?? '');
-        $current['duffel_environment'] = in_array(($input['duffel_environment'] ?? 'sandbox'), ['sandbox','live'], true) ? $input['duffel_environment'] : 'sandbox';
-        $current['default_cabin_class'] = sanitize_key($input['default_cabin_class'] ?? 'economy');
+        $current['duffel_api_token'] = sanitize_text_field((string) ($input['duffel_api_token'] ?? ''));
+        $current['duffel_environment'] = in_array((string) ($input['duffel_environment'] ?? 'sandbox'), ['sandbox','live'], true) ? (string) $input['duffel_environment'] : 'sandbox';
+        $current['default_cabin_class'] = sanitize_key((string) ($input['default_cabin_class'] ?? 'economy'));
         $current['debug_logging'] = ! empty($input['debug_logging']) ? 1 : 0;
-        $current['display_currency'] = in_array(($input['display_currency'] ?? 'EUR'), $allowedCurrencies, true) ? $input['display_currency'] : 'EUR';
-        $current['checkout_currency'] = in_array(($input['checkout_currency'] ?? 'EUR'), $allowedCurrencies, true) ? $input['checkout_currency'] : 'EUR';
+        $current['display_currency'] = in_array((string) ($input['display_currency'] ?? 'EUR'), $allowedCurrencies, true) ? (string) $input['display_currency'] : 'EUR';
+        $current['checkout_currency'] = in_array((string) ($input['checkout_currency'] ?? 'EUR'), $allowedCurrencies, true) ? (string) $input['checkout_currency'] : 'EUR';
         $current['manual_rates_json'] = wp_kses_post((string) ($input['manual_rates_json'] ?? '{}'));
-        $current['webhook_secret'] = sanitize_text_field($input['webhook_secret'] ?? $current['webhook_secret']);
+        $current['webhook_secret'] = sanitize_text_field((string) ($input['webhook_secret'] ?? $current['webhook_secret']));
 
-        $providers = $input['payment_providers'] ?? [];
+        $providers = is_array($input['payment_providers'] ?? null) ? $input['payment_providers'] : [];
         foreach (['paypal','paystack','stripe','flutterwave','bank_transfer'] as $provider) {
             $current['payment_providers'][$provider]['enabled'] = ! empty($providers[$provider]['enabled']) ? 1 : 0;
-            if ('bank_transfer' === $provider) {
-                $current['payment_providers'][$provider]['instructions'] = sanitize_textarea_field($providers[$provider]['instructions'] ?? '');
-            } else {
-                $current['payment_providers'][$provider]['checkout_url'] = esc_url_raw($providers[$provider]['checkout_url'] ?? '');
+            if ($provider === 'bank_transfer') {
+                $current['payment_providers'][$provider]['instructions'] = sanitize_textarea_field((string) ($providers[$provider]['instructions'] ?? ''));
+                continue;
+            }
+
+            $current['payment_providers'][$provider]['checkout_url'] = esc_url_raw((string) ($providers[$provider]['checkout_url'] ?? ''));
+
+            foreach (['client_id', 'client_secret', 'public_key', 'secret_key', 'publishable_key'] as $field) {
+                if (isset($providers[$provider][$field])) {
+                    $current['payment_providers'][$provider][$field] = sanitize_text_field((string) $providers[$provider][$field]);
+                }
             }
         }
 
-        $flags = $input['feature_flags'] ?? [];
+        $flags = is_array($input['feature_flags'] ?? null) ? $input['feature_flags'] : [];
         foreach (['roundtrip','multi_city','ancillaries','traveler_profiles'] as $flag) {
             $current['feature_flags'][$flag] = ! empty($flags[$flag]) ? 1 : 0;
         }
@@ -105,7 +110,9 @@ final class SettingsPage
         if (! current_user_can('manage_options')) {
             return;
         }
+
         echo '<div class="wrap"><h1>' . esc_html__('Flight Booking Settings', 'wfbp') . '</h1>';
+        echo '<p>' . esc_html__('Configure Duffel, currency, and payment API credentials for live checkout integration.', 'wfbp') . '</p>';
         echo '<form method="post" action="options.php">';
         settings_fields('wfbp_settings_group');
         do_settings_sections('wfbp-settings');
@@ -115,10 +122,10 @@ final class SettingsPage
 
     public function renderField(array $args): void
     {
-        $key = $args['key'];
+        $key = (string) $args['key'];
         $value = $this->settings->get($key, '');
 
-        if ('duffel_environment' === $key) {
+        if ($key === 'duffel_environment') {
             echo '<select name="' . esc_attr(Settings::OPTION_KEY . '[' . $key . ']') . '">';
             foreach (['sandbox', 'live'] as $env) {
                 printf('<option value="%1$s" %2$s>%1$s</option>', esc_attr($env), selected($value, $env, false));
@@ -136,13 +143,13 @@ final class SettingsPage
             return;
         }
 
-        if ('manual_rates_json' === $key) {
-            echo '<textarea rows="5" cols="60" name="' . esc_attr(Settings::OPTION_KEY . '[' . $key . ']') . '">' . esc_textarea((string) $value) . '</textarea>';
+        if ($key === 'manual_rates_json') {
+            echo '<textarea rows="6" cols="70" name="' . esc_attr(Settings::OPTION_KEY . '[' . $key . ']') . '">' . esc_textarea((string) $value) . '</textarea>';
             return;
         }
 
-        if ('debug_logging' === $key) {
-            printf('<label><input type="checkbox" name="%1$s" value="1" %2$s /> %3$s</label>', esc_attr(Settings::OPTION_KEY . '[' . $key . ']'), checked((int) $value, 1, false), esc_html__('Enable logging', 'wfbp'));
+        if ($key === 'debug_logging') {
+            printf('<label><input type="checkbox" name="%1$s" value="1" %2$s /> %3$s</label>', esc_attr(Settings::OPTION_KEY . '[' . $key . ']'), checked((int) $value, 1, false), esc_html__('Enable detailed API logs', 'wfbp'));
             return;
         }
 
@@ -152,15 +159,33 @@ final class SettingsPage
     public function renderPayments(): void
     {
         $providers = (array) $this->settings->get('payment_providers', []);
-        foreach (['paypal','paystack','stripe','flutterwave','bank_transfer'] as $provider) {
-            $isBank = 'bank_transfer' === $provider;
-            echo '<p><strong>' . esc_html(ucwords(str_replace('_', ' ', $provider))) . '</strong></p>';
-            printf('<label><input type="checkbox" name="%1$s[payment_providers][%2$s][enabled]" value="1" %3$s /> %4$s</label><br>', esc_attr(Settings::OPTION_KEY), esc_attr($provider), checked((int) ($providers[$provider]['enabled'] ?? 0), 1, false), esc_html__('Enabled', 'wfbp'));
-            if ($isBank) {
-                printf('<textarea rows="3" cols="60" name="%1$s[payment_providers][%2$s][instructions]">%3$s</textarea>', esc_attr(Settings::OPTION_KEY), esc_attr($provider), esc_textarea((string) ($providers[$provider]['instructions'] ?? '')));
-            } else {
-                printf('<input type="url" class="regular-text" name="%1$s[payment_providers][%2$s][checkout_url]" value="%3$s" />', esc_attr(Settings::OPTION_KEY), esc_attr($provider), esc_attr((string) ($providers[$provider]['checkout_url'] ?? '')));
+        $labels = [
+            'paypal' => ['client_id', 'client_secret', 'checkout_url'],
+            'paystack' => ['public_key', 'secret_key', 'checkout_url'],
+            'stripe' => ['publishable_key', 'secret_key', 'checkout_url'],
+            'flutterwave' => ['public_key', 'secret_key', 'checkout_url'],
+            'bank_transfer' => ['instructions'],
+        ];
+
+        foreach ($labels as $provider => $fields) {
+            echo '<fieldset style="margin-bottom:16px;padding:12px;border:1px solid #ccd0d4;background:#fff">';
+            echo '<legend><strong>' . esc_html(ucwords(str_replace('_', ' ', $provider))) . '</strong></legend>';
+            printf('<label><input type="checkbox" name="%1$s[payment_providers][%2$s][enabled]" value="1" %3$s /> %4$s</label><br><br>', esc_attr(Settings::OPTION_KEY), esc_attr($provider), checked((int) ($providers[$provider]['enabled'] ?? 0), 1, false), esc_html__('Enabled', 'wfbp'));
+
+            foreach ($fields as $field) {
+                $name = Settings::OPTION_KEY . '[payment_providers][' . $provider . '][' . $field . ']';
+                $value = (string) ($providers[$provider][$field] ?? '');
+                $label = ucwords(str_replace('_', ' ', $field));
+
+                if ($field === 'instructions') {
+                    echo '<p><label>' . esc_html($label) . '<br>';
+                    echo '<textarea rows="4" cols="70" name="' . esc_attr($name) . '">' . esc_textarea($value) . '</textarea></label></p>';
+                } else {
+                    echo '<p><label>' . esc_html($label) . '<br>';
+                    echo '<input type="text" class="regular-text" name="' . esc_attr($name) . '" value="' . esc_attr($value) . '"></label></p>';
+                }
             }
+            echo '</fieldset>';
         }
     }
 

@@ -28,7 +28,8 @@ WordPress Flight Booking Plugin delivers a modular booking platform designed for
 1. Upload `wordpress-flight-booking-plugin` to `/wp-content/plugins/`.
 2. Activate through **Plugins**.
 3. Visit **Settings > Flight Booking** and configure Duffel/API/payment settings.
-4. Place shortcode `[wfbp_search]` in any page.
+4. Place shortcode `[wfbp_search]` in any page for booking flow.
+5. Place `[wfbp_currency_switcher]` in your header or preferred global area.
 
 == Frequently Asked Questions ==
 = Is Duffel token required? =
